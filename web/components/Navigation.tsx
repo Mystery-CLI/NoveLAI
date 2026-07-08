@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Feather, Users } from 'lucide-react';
+import { BookOpen, Feather, Users, Shield } from 'lucide-react';
 
 interface NavigationProps {
   currentScreen: string;
@@ -39,6 +39,16 @@ export function Navigation({ currentScreen, onNavigate }: NavigationProps) {
         }`}
       >
         <Users size={18} /> Characters
+      </button>
+      <button
+        onClick={() => onNavigate('factions')}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+          currentScreen === 'factions'
+            ? 'bg-accent text-background'
+            : 'bg-surface border border-surface-hover text-foreground hover:border-accent'
+        }`}
+      >
+        <Shield size={18} /> Factions
       </button>
     </nav>
   );
