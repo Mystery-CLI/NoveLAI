@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { ReviewPanel, StateChange, Finding } from './ReviewPanel';
 
 interface Chapter {
   id: number;
@@ -47,10 +48,12 @@ const mockChapters: Chapter[] = [
 
 export function ChapterEditor({ story = { title: 'The Immortal Path' } }: ChapterEditorProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [currentChapter, setCurrentChapter] = useState<Chapter>(mockChapters[2]);
   const [content, setContent] = useState(currentChapter.content);
   const [wordCount, setWordCount] = useState(currentChapter.wordCount);
+  const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+  const [stateChanges, setStateChanges] = useState<StateChange[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -73,7 +76,61 @@ export function ChapterEditor({ story = { title: 'The Immortal Path' } }: Chapte
   };
 
   const handleRunCheck = () => {
-    setRightSidebarOpen(!rightSidebarOpen);
+    // Generate mock check results
+    const mockStateChanges: StateChange[] = [
+      {
+        id: '1',
+        characterName: 'Wei Chen',
+        changeType: 'Realm Advancement',
+        oldValue: 'Foundation Establishment',
+        newValue: 'Core Formation',
+        evidence: 'The chapter describes Wei Chen breaking through the tribulation and entering Core Formation realm.',
+        confidence: 'High',
+      },
+      {
+        id: '2',
+        characterName: 'Li Wei',
+        changeType: 'Status Change',
+        oldValue: 'Alive',
+        newValue: 'Dead',
+        evidence: 'References suggest Li Wei was killed in the sect conflict described in chapters 8-10.',
+        confidence: 'Medium',
+      },
+    ];
+
+    const mockFindings: Finding[] = [
+      {
+        id: '1',
+        severity: 'Violation',
+        type: 'Continuity Error',
+        description: 'Character appears in scene after their death was confirmed.',
+        evidence: 'Jade Maiden mentioned in chapter 12 but was confirmed dead in chapter 8.',
+        confidence: 'High',
+        dismissed: false,
+      },
+      {
+        id: '2',
+        severity: 'Warning',
+        type: 'Inconsistent Cultivation Level',
+        description: 'Character\'s power level doesn\'t match their described realm.',
+        evidence: 'Wei Chen displays techniques from Immortal Ascension realm but is in Core Formation.',
+        confidence: 'Medium',
+        dismissed: false,
+      },
+      {
+        id: '3',
+        severity: 'Info',
+        type: 'Timeline Note',
+        description: 'Potential timeline inconsistency to review.',
+        evidence: 'Three years passed between chapters 5 and 6, but characters don\'t show aging.',
+        confidence: 'Low',
+        dismissed: false,
+      },
+    ];
+
+    setStateChanges(mockStateChanges);
+    setFindings(mockFindings);
+    setReviewPanelOpen(true);
   };
 
   return (
@@ -188,43 +245,22 @@ export function ChapterEditor({ story = { title: 'The Immortal Path' } }: Chapte
         </div>
       </div>
 
-      {/* Right Sidebar - Review Panel */}
-      <div
-        className={`${
-          rightSidebarOpen ? 'w-80' : 'w-0'
-        } bg-surface border-l border-surface-hover transition-all duration-300 flex flex-col overflow-hidden`}
-      >
-        <div className="p-4 border-b border-surface-hover">
-          <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">Check Results</h2>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b border-surface-hover">
-          <button className="flex-1 px-4 py-3 text-sm font-medium text-accent border-b-2 border-accent">
-            Findings
-          </button>
-          <button className="flex-1 px-4 py-3 text-sm font-medium text-muted hover:text-foreground">
-            Changes
-          </button>
-        </div>
-
-        {/* Empty State */}
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center">
-            <p className="text-muted text-sm">Run a consistency check to see findings here.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Toggle Right Sidebar */}
-      {rightSidebarOpen && (
-        <button
-          onClick={() => setRightSidebarOpen(false)}
-          className="w-10 flex items-center justify-center bg-surface hover:bg-surface-hover border-l border-surface-hover transition-colors"
-        >
-          <ChevronRight size={18} className="text-accent" />
-        </button>
-      )}
+      {/* Review Panel Modal */}
+      <ReviewPanel
+        isOpen={reviewPanelOpen}
+        onClose={() => setReviewPanelOpen(false)}
+        stateChanges={stateChanges}
+        findings={findings}
+        onApproveChange={(changeId) => {
+          setStateChanges(stateChanges.map(c => c.id === changeId ? { ...c, decision: 'approved' as const } : c));
+        }}
+        onRejectChange={(changeId) => {
+          setStateChanges(stateChanges.map(c => c.id === changeId ? { ...c, decision: 'rejected' as const } : c));
+        }}
+        onDismissFinding={(findingId) => {
+          setFindings(findings.map(f => f.id === findingId ? { ...f, dismissed: true } : f));
+        }}
+      />
     </div>
   );
 }
