@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChapterEditor } from '@/components/ChapterEditor';
 import { StoryBibleBrowser } from '@/components/StoryBibleBrowser';
+import { CharacterRoster } from '@/components/CharacterRoster';
 import { Navigation } from '@/components/Navigation';
 
 export default function Home() {
@@ -13,6 +14,7 @@ export default function Home() {
       <Navigation currentScreen={currentScreen} onNavigate={setCurrentScreen} />
       {currentScreen === 'editor' && <ChapterEditor story={{ title: 'The Immortal Path' }} />}
       {currentScreen === 'bible' && <StoryBibleBrowser />}
+      {currentScreen === 'characters' && <CharacterRoster />}
     </main>
   );
 }
