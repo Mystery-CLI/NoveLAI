@@ -1,0 +1,248 @@
+// Story bible + continuity-checker data model for NoveLAI.
+// This backend is the source of truth consumed by the checker service
+// (src/services/continuityChecker) and exposed over REST for the frontend.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Cultivation / progression
+// ---------------------------------------------------------------------------
+
+model CultivationTier {
+  id         String  @id @default(cuid())
+  name       String  @unique
+  orderIndex Int     @unique
+
+  characters Character[]
+
+  @@index([orderIndex])
+}
+
+// ---------------------------------------------------------------------------
+// Factions
+// ---------------------------------------------------------------------------
+
+model Faction {
+  id      String @id @default(cuid())
+  name    String @unique
+  summary String?
+
+  characters   Character[]
+  relationsA   FactionRelation[] @relation("FactionA")
+  relationsB   FactionRelation[] @relation("FactionB")
+}
+
+// Directional standing isn't meaningful for hostility; we store one row per
+// unordered pair and keep factionAId < factionBId by convention at the
+// application layer.
+model FactionRelation {
+  id         String  @id @default(cuid())
+  factionAId String
+  factionA   Faction @relation("FactionA", fields: [factionAId], references: [id])
+  factionBId String
+  factionB   Faction @relation("FactionB", fields: [factionBId], references: [id])
+  standing   String // e.g. "ally", "neutral", "rival", "hostile", "war"
+  notes      String?
+
+  @@unique([factionAId, factionBId])
+}
+
+// ---------------------------------------------------------------------------
+// Characters
+// ---------------------------------------------------------------------------
+
+model Character {
+  id      String   @id @default(cuid())
+  name    String   @unique
+  aliases String[] @default([])
+  status  String? // free text, e.g. "alive", "presumed dead", "injured"
+  notes   String?
+
+  cultivationTierId String?
+  cultivationTier   CultivationTier? @relation(fields: [cultivationTierId], references: [id])
+
+  factionId String?
+  faction   Faction? @relation(fields: [factionId], references: [id])
+
+  bibleRules       BibleRule[]
+  foreshadowLinks  ForeshadowItemCharacter[]
+  stateChanges     CharacterStateChange[] @relation("SubjectCharacter")
+  relatedInChanges CharacterStateChange[] @relation("RelatedCharacter")
+}
+
+// A change applied to a character's state, sourced from a chapter's
+// continuity report (after human approval) or made directly by an editor.
+model CharacterStateChange {
+  id          String   @id @default(cuid())
+  characterId String
+  character   Character @relation("SubjectCharacter", fields: [characterId], references: [id])
+  changeType  StateChangeType
+  oldValue    String?
+  newValue    String
+  evidenceQuote String?
+
+  relatedCharacterId String?
+  relatedCharacter   Character? @relation("RelatedCharacter", fields: [relatedCharacterId], references: [id])
+
+  chapterId String?
+  chapter   Chapter? @relation(fields: [chapterId], references: [id])
+
+  proposedStateChangeId String?             @unique
+  proposedStateChange   ProposedStateChange? @relation(fields: [proposedStateChangeId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum StateChangeType {
+  realm_change
+  faction_change
+  status_change
+  relationship_change
+}
+
+// ---------------------------------------------------------------------------
+// Bible rules / style rules
+// ---------------------------------------------------------------------------
+
+model BibleRule {
+  id         String  @id @default(cuid())
+  text       String
+  isHardRule Boolean @default(false)
+
+  // Optional scoping: a rule that only applies to / is only relevant when a
+  // specific character is on-page (e.g. a character-specific hard constraint).
+  characterId String?
+  character   Character? @relation(fields: [characterId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model StyleRule {
+  id   String @id @default(cuid())
+  text String
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Foreshadowing
+// ---------------------------------------------------------------------------
+
+model ForeshadowItem {
+  id            String               @id @default(cuid())
+  description   String
+  revealStatus  ForeshadowRevealStatus @default(planted)
+  intendedReveal String? // notes on when/how it's meant to be revealed
+
+  characters ForeshadowItemCharacter[]
+
+  createdAt DateTime @default(now())
+}
+
+enum ForeshadowRevealStatus {
+  planted
+  hinted
+  partially_revealed
+  confirmed
+}
+
+model ForeshadowItemCharacter {
+  foreshadowItemId String
+  foreshadowItem   ForeshadowItem @relation(fields: [foreshadowItemId], references: [id])
+  characterId      String
+  character        Character      @relation(fields: [characterId], references: [id])
+
+  @@id([foreshadowItemId, characterId])
+}
+
+// ---------------------------------------------------------------------------
+// Chapters + continuity reports
+// ---------------------------------------------------------------------------
+
+model Chapter {
+  id      String @id @default(cuid())
+  number  Int    @unique
+  title   String?
+  content String
+
+  // Free-text snapshot of how this chapter ends (wounds, location,
+  // unresolved tension) — used as continuity context for the NEXT chapter's
+  // check. Maintained by the author/editor, not auto-derived.
+  endingStateNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reports            ConsistencyReport[]
+  characterStateChanges CharacterStateChange[]
+}
+
+model ConsistencyReport {
+  id        String   @id @default(cuid())
+  chapterId String
+  chapter   Chapter  @relation(fields: [chapterId], references: [id])
+
+  insufficientContext String[] @default([])
+  rawResponse         Json
+
+  findings             Finding[]
+  proposedStateChanges ProposedStateChange[]
+
+  createdAt DateTime @default(now())
+}
+
+model Finding {
+  id                     String   @id @default(cuid())
+  reportId               String
+  report                 ConsistencyReport @relation(fields: [reportId], references: [id])
+  type                   FindingType
+  severity               FindingSeverity
+  description            String
+  evidenceQuote          String
+  relatedRuleOrCharacter String?
+  confidence             Confidence
+}
+
+enum FindingType {
+  rule_violation
+  state_contradiction
+  tier_skip
+  foreshadow_exposure
+  continuity_break
+}
+
+enum FindingSeverity {
+  violation
+  warning
+  info
+}
+
+enum Confidence {
+  high
+  medium
+  low
+}
+
+model ProposedStateChange {
+  id            String   @id @default(cuid())
+  reportId      String
+  report        ConsistencyReport @relation(fields: [reportId], references: [id])
+  characterName String
+  changeType    StateChangeType
+  oldValue      String?
+  newValue      String
+  evidenceQuote String
+  confidence    Confidence
+
+  applied   Boolean  @default(false)
+  appliedAt DateTime?
+
+  appliedAsChange CharacterStateChange?
+}
